@@ -1,6 +1,5 @@
 package com.example.expensetracker2.util
 
-
 object Constants {
 
     // Expense Categories
@@ -30,6 +29,12 @@ object Constants {
     const val COLLECTION_EXPENSES = "expenses"
     const val COLLECTION_USERS = "users"
 
-    // API (if you use PHP/MySQL backend later)
-    const val BASE_URL = "https://yourapi.com/api/"
+    // API Configuration
+    // TODO: Replace with your actual API URL
+    const val BASE_URL = "http://192.168.1.101/expense_tracker/api/"
+
+    // Sync Settings
+    const val SYNC_SOURCE_FIREBASE = "firebase"
+    const val SYNC_SOURCE_PHP = "php"
+    const val CURRENT_SYNC_SOURCE = SYNC_SOURCE_PHP // Change to SYNC_SOURCE_PHP when ready
 }

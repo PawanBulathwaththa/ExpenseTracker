@@ -2,6 +2,7 @@ package com.example.expensetracker2.data.repository
 
 import com.example.expensetracker2.data.local.ExpenseDao
 import com.example.expensetracker2.data.model.Expense
+import com.example.expensetracker2.data.remote.ApiManager
 import com.example.expensetracker2.data.remote.FirebaseManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.Dispatchers
@@ -9,7 +10,8 @@ import kotlinx.coroutines.withContext
 
 class ExpenseRepository(
     private val expenseDao: ExpenseDao,
-    private val firebaseManager: FirebaseManager
+    private val firebaseManager: FirebaseManager,
+    apiManager: ApiManager
 ) {
 
     // ====================
@@ -58,12 +60,18 @@ class ExpenseRepository(
                 // 1. Save to local database first
                 expenseDao.insertExpense(expense)
 
-                // 2. Try to sync to cloud
-                val syncResult = firebaseManager.syncExpenseToCloud(expense)
+                // 2. Try to sync to cloud (Firebase)
+                try {
+                    val syncResult = firebaseManager.syncExpenseToCloud(expense)
 
-                if (syncResult.isSuccess) {
-                    // Mark as synced
-                    expenseDao.markAsSynced(expense.id)
+                    if (syncResult.isSuccess) {
+                        // Mark as synced if cloud sync succeeds
+                        expenseDao.markAsSynced(expense.id)
+                    }
+                } catch (e: Exception) {
+                    // Cloud sync failed, but local save succeeded
+                    // Continue without error - will sync later
+                    e.printStackTrace()
                 }
 
                 Result.success(Unit)

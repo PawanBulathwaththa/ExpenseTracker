@@ -4,6 +4,7 @@ import com.example.expensetracker2.data.local.ExpenseDao
 import com.example.expensetracker2.data.model.Expense
 import com.example.expensetracker2.data.remote.ApiManager
 import com.example.expensetracker2.data.remote.FirebaseManager
+import com.example.expensetracker2.util.Constants
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -11,7 +12,7 @@ import kotlinx.coroutines.withContext
 class ExpenseRepository(
     private val expenseDao: ExpenseDao,
     private val firebaseManager: FirebaseManager,
-    apiManager: ApiManager
+    private val apiManager: ApiManager
 ) {
 
     // ====================
@@ -54,7 +55,7 @@ class ExpenseRepository(
     // Cloud Sync Operations
     // ====================
 
-    suspend fun addExpenseWithSync(expense: Expense): Result<Unit> {
+    /*suspend fun addExpenseWithSync(expense: Expense): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
                 // 1. Save to local database first
@@ -79,6 +80,25 @@ class ExpenseRepository(
                 Result.failure(e)
             }
         }
+    }*/
+
+    suspend fun addExpenseWithSync(expense: Expense): Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            try {
+                expenseDao.insertExpense(expense)
+
+                if (Constants.CURRENT_SYNC_SOURCE == Constants.SYNC_SOURCE_PHP) {
+                    apiManager.addExpense(expense)
+                } else {
+                    firebaseManager.syncExpenseToCloud(expense)
+                }
+
+                expenseDao.markAsSynced(expense.id)
+                Result.success(Unit)
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
     }
 
     suspend fun updateExpenseWithSync(expense: Expense): Result<Unit> {
@@ -92,12 +112,15 @@ class ExpenseRepository(
                 expenseDao.updateExpense(updatedExpense)
 
                 // Sync to cloud
-                val syncResult = firebaseManager.updateExpenseInCloud(updatedExpense)
+                if (Constants.CURRENT_SYNC_SOURCE == Constants.SYNC_SOURCE_PHP) {
+                    apiManager.updateExpense(updatedExpense)
+                } else {
+                    val syncResult = firebaseManager.updateExpenseInCloud(updatedExpense)
 
-                if (syncResult.isSuccess) {
-                    expenseDao.markAsSynced(expense.id)
+                    if (syncResult.isSuccess) {
+                        expenseDao.markAsSynced(expense.id)
+                    }
                 }
-
                 Result.success(Unit)
             } catch (e: Exception) {
                 Result.failure(e)
@@ -108,18 +131,25 @@ class ExpenseRepository(
     suspend fun deleteExpenseWithSync(expense: Expense): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                // Delete from local
                 expenseDao.deleteExpense(expense)
 
-                // Delete from cloud
-                firebaseManager.deleteExpenseFromCloud(expense.id)
+                if (Constants.CURRENT_SYNC_SOURCE == Constants.SYNC_SOURCE_PHP) {
+                    val result = apiManager.deleteExpense(expense.id)
+                    if (result.isFailure) {
+                        throw result.exceptionOrNull() ?: Exception("PHP delete failed")
+                    }
+                } else {
+                    firebaseManager.deleteExpenseFromCloud(expense.id)
+                }
 
                 Result.success(Unit)
             } catch (e: Exception) {
+                e.printStackTrace()
                 Result.failure(e)
             }
         }
     }
+
 
     suspend fun syncAllExpenses(userId: String): Result<Unit> {
         return withContext(Dispatchers.IO) {
@@ -129,7 +159,7 @@ class ExpenseRepository(
 
                 // 2. Upload to cloud
                 if (unsyncedExpenses.isNotEmpty()) {
-                    val result = firebaseManager.syncMultipleExpenses(unsyncedExpenses)
+                    val result = apiManager.syncExpenses(userId,unsyncedExpenses)
 
                     if (result.isSuccess) {
                         // Mark all as synced
@@ -140,7 +170,7 @@ class ExpenseRepository(
                 }
 
                 // 3. Fetch from cloud and merge
-                val cloudResult = firebaseManager.fetchExpensesFromCloud(userId)
+                val cloudResult = apiManager.fetchExpenses(userId)
 
                 if (cloudResult.isSuccess) {
                     val cloudExpenses = cloudResult.getOrNull() ?: emptyList()

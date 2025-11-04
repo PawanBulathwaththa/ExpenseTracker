@@ -13,11 +13,12 @@ interface ApiService {
     @GET("expenses/get.php")
     suspend fun getExpenses(@Query("userId") userId: String): Response<ExpensesResponse>
 
-    @PUT("expenses/update.php")
+    @POST("expenses/update.php")
     suspend fun updateExpense(@Body expense: ExpenseRequest): Response<ApiResponse>
 
-    @DELETE("expenses/delete.php")
+    @POST("expenses/delete.php")
     suspend fun deleteExpense(@Query("id") expenseId: String): Response<ApiResponse>
+
 
     @POST("expenses/sync.php")
     suspend fun syncExpenses(@Body request: SyncRequest): Response<SyncResponse>
